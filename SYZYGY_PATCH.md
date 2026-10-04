@@ -24,6 +24,14 @@ IP transport 的底层 `netwatch::UdpSocket` 在 Drop 中只排队 `spawn_blocki
 
 上游发布核对时间：2026-10-04；真实 1.3.0 release 的 Router 仍有 early return，Endpoint 仍在 actor 超时后丢弃句柄，且未显式等待底层 UDP socket 关闭。待上游实现同等等待保证后恢复 registry 来源。本轮未创建远端 issue 或 PR。
 
+2026-10-04 的 1.3.0 fork 验证（macOS aarch64）：
+
+- 使用 `mbx update -p 'registry+https://github.com/rust-lang/crates.io-index#iroh-base@1.2.0' --precise 1.3.0` 精确刷新 registry base/relay 依赖；锁文件由 Cargo 生成，没有宽泛更新。
+- `mbx test -p iroh --locked --lib socket::tests::shutdown`：3 passed。
+- 同命令分别筛选 `endpoint::tests`、`protocol::tests`、`socket::tests`：35 passed / 1 ignored、12 passed、12 passed。socket 套件包含前述 3 个关闭测试，合计 59 个不同测试通过，1 个上游测试忽略。
+- `mbx check -p iroh --locked --all-targets --all-features`、`mbx clippy -p iroh --locked --all-targets --all-features -- -D warnings`、`mbx fmt --all -- --check` 全部通过。
+- 上述构建设置 `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 MBX_GC_AUTO=false`；本记录不代表其它平台运行验证，也不代替父仓 consumer 门禁。
+
 来源：
 - https://docs.rs/iroh/1.3.0/iroh/protocol/struct.Router.html#method.shutdown
 - https://github.com/n0-computer/iroh/blob/0072d7d84b233f9e7185eb676f049beaf557ac03/iroh/src/protocol.rs
