@@ -1,10 +1,10 @@
 # Iroh Router 与 Endpoint 关闭完成语义
 
-基线：上游 Iroh `v1.3.0` release，提交 `0072d7d84b233f9e7185eb676f049beaf557ac03`。保留完整上游仓库、API、版本和 MIT OR Apache-2.0 许可证。
+基线：上游 Iroh `v1.4.0` release，提交 `55908a5809b61c72ec8deeff024038f4a9d68ab7`。保留完整上游仓库、API、版本和 MIT OR Apache-2.0 许可证。
 
-本仓库作为 Syzygy 的 `crates/patches/iroh` submodule，使用分支 `syzygy/lifecycle-ownership-v1.3.0`；父仓用 gitlink 固定提交，Cargo patch 指向 `crates/patches/iroh/iroh`。`iroh/Cargo.toml` 对 iroh-base、iroh-dns、iroh-relay 使用原发布版本的 registry 依赖，不同时加载上游 sibling path 的副本，保持消费方的公共类型身份与原锁一致。完整上游目录仍保留，补丁与原始上游提交可直接对比。
+本仓库作为 Syzygy 的 `crates/patches/iroh` submodule，使用分支 `syzygy/lifecycle-ownership-v1.4.0`；父仓用 gitlink 固定提交，Cargo patch 指向 `crates/patches/iroh/iroh`。`iroh/Cargo.toml` 对 iroh-base、iroh-dns、iroh-relay 使用原发布版本的 registry 依赖，不同时加载上游 sibling path 的副本，保持消费方的公共类型身份与原锁一致。完整上游目录仍保留，补丁与原始上游提交可直接对比。
 
-本次从原 `syzygy/lifecycle-ownership-v1.2.0` 分支合并真实 1.3.0 release，保留原关闭补丁与回归测试。旧本地 `v1.3.0` tag 曾指向 iroh-dns 1.3.0 的发布提交（Iroh 本体仍为 1.2.0），因此基线以以上完整提交为准，并用官方远端 tag 的 peeled commit 核验。不要只修改 package version 来模拟升级。
+本次从 `syzygy/lifecycle-ownership-v1.3.0` 合并官方 `v1.4.0` 的真实源码，并保留关闭补丁。2026-10-21 核对该 release：Router 仍会因已设置 shutdown token 提前返回；socket actor 仍只有 100ms 等待且未等待底层 UDP OS close，因此这些补丁尚不能删除。新版的无 relay 切网地址刷新、relay 接收重试和 Pkarr 代理支持直接沿用上游实现。公共身份类型只来自 registry 的 1.4.0 base。
 
 更新流程：在该分支集成上游和补丁、运行对应 patch 与 Syzygy consumer 验证、推送可获取的 commit，最后更新父仓 gitlink。`git submodule update --init --recursive` 复现已固定的源码；不要在构建时跟随远端分支 HEAD。
 
@@ -22,7 +22,7 @@ IP transport 的底层 `netwatch::UdpSocket` 在 Drop 中只排队 `spawn_blocki
 
 这轮 Endpoint / IP 退出保证针对原生 Tokio 路径；不把 wasm shim 的任务等待或未审计的其它子系统等同于已验证的原生资源关闭。Drop 仍是未完成显式关闭时的紧急中止路径，不代替 `close().await`。
 
-上游发布核对时间：2026-10-04；真实 1.3.0 release 的 Router 仍有 early return，Endpoint 仍在 actor 超时后丢弃句柄，且未显式等待底层 UDP socket 关闭。待上游实现同等等待保证后恢复 registry 来源。本轮未创建远端 issue 或 PR。
+上游发布核对时间：2026-10-21；真实 1.4.0 release 的 Router 仍有 early return，Endpoint 仍在 actor 超时后丢弃句柄，且未显式等待底层 UDP socket 关闭。待上游实现同等等待保证后恢复 registry 来源。本轮未创建远端 issue 或 PR。
 
 2026-10-04 的 1.3.0 fork 验证（macOS aarch64）：
 
@@ -40,3 +40,13 @@ IP transport 的底层 `netwatch::UdpSocket` 在 Drop 中只排队 `spawn_blocki
 - https://docs.rs/netwatch/0.19.3/netwatch/struct.UdpSocket.html#method.close
 - https://docs.rs/netwatch/0.19.3/src/netwatch/udp.rs.html
 - https://www.iroh.computer/blog/iroh-1-3-0
+
+本轮官方基线： https://github.com/n0-computer/iroh/releases/tag/v1.4.0
+
+2026-10-21 的 1.4.0 升级验证（macOS aarch64，Rust 1.98.1）：
+
+- 独立 `mbx +1.98.1 test --locked -p iroh --lib --all-features`，依次筛选 `socket::tests`、`endpoint::tests`、`protocol::tests`：12 / 36 / 12 passed，合计 60 个不同测试通过，1 个上游测试忽略。包含取消/并发 close、100ms 之后继续 join、OS UDP close job、切网重绑定与 Router 关闭。
+- 独立 `mbx +1.98.1 clippy --locked -p iroh --all-targets --all-features --no-deps -- -D warnings`：通过。
+- 消费方 syzygy-net / syzygy-net-discovery / syzygy-net-node-runtime / syzygy-net-transport：86 / 79 / 57 / 53 passed。
+- 本机真实 localhost QUIC/Gossip 驱动完成双向 broadcast、反向冗余连接选择与 Router joined shutdown。在 Endpoint handle 仍存活时，两端原始 UDP 端口均可立即重新绑定。
+- 父仓证据：`tmp/evaluation/iroh-upgrade-20261021/`；说明：`docs/ongoing/2026-10/iroh-upgrade-20261021.md`。历史 1.3.0 结果不能替代本轮验证；本轮未执行安装版、多设备或非 macOS 运行验收。
